@@ -26,6 +26,10 @@
 (def ^:private default-pacific-results
   #{[6 "Shad Ferdynand" "2014-08-02T05:30:00.000-07:00"]})
 
+(def ^:private drivers-with-tz-support
+  [:druid :mysql :oracle :postgres :presto
+   :redshift :snowflake :sparksql :vertica])
+
 ;; parameters always get `date` bucketing so doing something the between stuff we do below is basically just going to
 ;; match anything with a `2014-08-02` date
 (def ^:private default-pacific-results-for-params
@@ -34,7 +38,7 @@
 
 ;; Query PG using a report-timezone set to pacific time. Should adjust the query parameter using that report timezone
 ;; and should return the timestamp in pacific time as well
-(datasets/expect-with-drivers [:postgres :mysql]
+(datasets/expect-with-drivers drivers-with-tz-support
   default-pacific-results
   (with-tz-db
     (tu/with-temporary-setting-values [report-timezone "America/Los_Angeles"]
@@ -58,7 +62,7 @@
 (def ^:private query-rows-set (comp set qp.test/rows qp/process-query))
 
 ;; Test that native dates are parsed with the report timezone (when supported)
-(datasets/expect-with-drivers [:postgres :mysql]
+(datasets/expect-with-drivers drivers-with-tz-support
   default-pacific-results-for-params
   (with-tz-db
     (tu/with-temporary-setting-values [report-timezone "America/Los_Angeles"]
@@ -76,7 +80,7 @@
                      {:type "date/single" :target ["variable" ["template-tag" "date2"]] :value "2014-08-02T06:00:00.000000"}]}))))
 
 ;; This does not currently work for MySQL
-(datasets/expect-with-drivers [:postgres :mysql]
+(datasets/expect-with-drivers drivers-with-tz-support
   default-pacific-results-for-params
   (with-tz-db
     (tu/with-temporary-setting-values [report-timezone "America/Los_Angeles"]
@@ -93,7 +97,7 @@
         :parameters [{:type "date/range", :target ["dimension" ["template-tag" "ts_range"]], :value "2014-08-02~2014-08-03"}]}))))
 
 ;; Querying using a single date
-(datasets/expect-with-drivers [:postgres :mysql]
+(datasets/expect-with-drivers drivers-with-tz-support
   default-pacific-results-for-params
   (with-tz-db
     (tu/with-temporary-setting-values [report-timezone "America/Los_Angeles"]
@@ -111,7 +115,7 @@
 
 ;; This is the same answer as above but uses timestamp with the timezone included. The report timezone is still
 ;; pacific though, so it should return as pacific regardless of how the filter was specified
-(datasets/expect-with-drivers [:postgres :mysql]
+(datasets/expect-with-drivers drivers-with-tz-support
   default-pacific-results
   (with-tz-db
     (tu/with-temporary-setting-values [report-timezone "America/Los_Angeles"]
@@ -121,7 +125,7 @@
           set))))
 
 ;; Checking UTC report timezone filtering and responses
-(datasets/expect-with-drivers [:postgres :bigquery :mysql]
+(datasets/expect-with-drivers drivers-with-tz-support
   default-utc-results
   (with-tz-db
     (tu/with-temporary-setting-values [report-timezone "UTC"]
@@ -132,7 +136,7 @@
 
 ;; With no report timezone, the JVM timezone is used. For our tests this is UTC so this should be the same as
 ;; specifying UTC for a report timezone
-(datasets/expect-with-drivers [:postgres :bigquery :mysql]
+(datasets/expect-with-drivers drivers-with-tz-support
   default-utc-results
   (with-tz-db
     (-> (data/run-mbql-query users
