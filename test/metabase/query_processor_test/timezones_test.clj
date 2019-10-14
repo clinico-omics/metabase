@@ -126,6 +126,17 @@
           qp.test/rows
           set))))
 
+;; Repeat test but using `last_login_without_tz`
+(datasets/expect-with-drivers drivers-with-tz-support
+  default-pacific-results
+  (with-tz-db
+    (tu/with-temporary-setting-values [report-timezone "America/Los_Angeles"]
+      (-> (data/run-mbql-query users
+            {:filter [:between $last_login_without_tz "2014-08-02T10:00:00.000000Z" "2014-08-02T13:00:00.000000Z"]
+             :fields [$id $name $last_login_without_tz]})
+          qp.test/rows
+          set))))
+
 ;; Checking UTC report timezone filtering and responses
 (datasets/expect-with-drivers drivers-with-tz-support
   default-utc-results
@@ -134,6 +145,17 @@
       (-> (data/run-mbql-query users
             {:filter [:between $last_login_with_tz "2014-08-02T10:00:00.000000" "2014-08-02T13:00:00.000000"]
              :fields [$id $name $last_login_with_tz]})
+          qp.test/rows
+          set))))
+
+;; Repeat test but using `last_login_without_tz`
+(datasets/expect-with-drivers drivers-with-tz-support
+  default-utc-results
+  (with-tz-db
+    (tu/with-temporary-setting-values [report-timezone "UTC"]
+      (-> (data/run-mbql-query users
+            {:filter [:between $last_login_without_tz "2014-08-02T10:00:00.000000" "2014-08-02T13:00:00.000000"]
+             :fields [$id $name $last_login_without_tz]})
           qp.test/rows
           set))))
 
