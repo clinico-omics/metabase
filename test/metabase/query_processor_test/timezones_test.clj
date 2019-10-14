@@ -43,7 +43,8 @@
   (with-tz-db
     (tu/with-temporary-setting-values [report-timezone "America/Los_Angeles"]
       (-> (data/run-mbql-query users
-            {:filter [:between $last_login "2014-08-02T03:00:00.000000" "2014-08-02T06:00:00.000000"]})
+            {:filter [:between $last_login_with_tz "2014-08-02T03:00:00.000000" "2014-08-02T06:00:00.000000"]
+             :fields [$id $name $last_login_with_tz]})
           qp.test/rows
           set))))
 
@@ -69,10 +70,10 @@
       (query-rows-set
        {:database   (data/id)
         :type       :native
-        :native     {:query         (format "select %s, %s, %s from %s where cast(last_login as date) between {{date1}} and {{date2}}"
+        :native     {:query         (format "select %s, %s, %s from %s where cast(last_login_with_tz as date) between {{date1}} and {{date2}}"
                                             (field-identifier :users :id)
                                             (field-identifier :users :name)
-                                            (field-identifier :users :last_login)
+                                            (field-identifier :users :last_login_with_tz)
                                             (users-table-identifier))
                      :template-tags {:date1 {:name "date1" :display_name "Date1" :type "date" }
                                      :date2 {:name "date2" :display_name "Date2" :type "date" }}}
@@ -90,10 +91,10 @@
         :native     {:query         (format "select %s, %s, %s from %s where {{ts_range}}"
                                             (field-identifier :users :id)
                                             (field-identifier :users :name)
-                                            (field-identifier :users :last_login)
+                                            (field-identifier :users :last_login_with_tz)
                                             (users-table-identifier))
                      :template-tags {:ts_range {:name      "ts_range", :display_name "Timestamp Range", :type "dimension",
-                                                :dimension ["field-id" (data/id :users :last_login)]}}}
+                                                :dimension ["field-id" (data/id :users :last_login_with_tz)]}}}
         :parameters [{:type "date/range", :target ["dimension" ["template-tag" "ts_range"]], :value "2014-08-02~2014-08-03"}]}))))
 
 ;; Querying using a single date
@@ -107,10 +108,10 @@
         :native     {:query         (format "select %s, %s, %s from %s where {{just_a_date}}"
                                             (field-identifier :users :id)
                                             (field-identifier :users :name)
-                                            (field-identifier :users :last_login)
+                                            (field-identifier :users :last_login_with_tz)
                                             (users-table-identifier))
                      :template-tags {:just_a_date {:name "just_a_date", :display_name "Just A Date", :type "dimension",
-                                                   :dimension ["field-id" (data/id :users :last_login)]}}}
+                                                   :dimension ["field-id" (data/id :users :last_login_with_tz)]}}}
         :parameters [{:type "date/single", :target ["dimension" ["template-tag" "just_a_date"]], :value "2014-08-02"}]}))))
 
 ;; This is the same answer as above but uses timestamp with the timezone included. The report timezone is still
@@ -120,7 +121,8 @@
   (with-tz-db
     (tu/with-temporary-setting-values [report-timezone "America/Los_Angeles"]
       (-> (data/run-mbql-query users
-            {:filter [:between $last_login "2014-08-02T10:00:00.000000Z" "2014-08-02T13:00:00.000000Z"]})
+            {:filter [:between $last_login_with_tz "2014-08-02T10:00:00.000000Z" "2014-08-02T13:00:00.000000Z"]
+             :fields [$id $name $last_login_with_tz]})
           qp.test/rows
           set))))
 
@@ -130,7 +132,8 @@
   (with-tz-db
     (tu/with-temporary-setting-values [report-timezone "UTC"]
       (-> (data/run-mbql-query users
-            {:filter [:between $last_login "2014-08-02T10:00:00.000000" "2014-08-02T13:00:00.000000"]})
+            {:filter [:between $last_login_with_tz "2014-08-02T10:00:00.000000" "2014-08-02T13:00:00.000000"]
+             :fields [$id $name $last_login_with_tz]})
           qp.test/rows
           set))))
 
@@ -140,6 +143,7 @@
   default-utc-results
   (with-tz-db
     (-> (data/run-mbql-query users
-          {:filter [:between $last_login "2014-08-02T10:00:00.000000" "2014-08-02T13:00:00.000000"]})
+          {:filter [:between $last_login_with_tz "2014-08-02T10:00:00.000000" "2014-08-02T13:00:00.000000"]
+           :fields [$id $name $last_login_with_tz]})
         qp.test/rows
         set)))

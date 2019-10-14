@@ -110,7 +110,7 @@
         (for [row rows]
           (concat row [nil]))))))
 
-(defonce ^{:doc "The main `test-data` dataset, but `last_login` has a base type of `:type/DateTimeWithTZ`."}
+(defonce ^{:doc "The main `test-data` dataset, but forking `last_login` into fields with/without timezone."}
   test-data-with-timezones
   (tx/transformed-dataset-definition "test-data-with-timezones" test-data
     (tx/transform-dataset-update-table "users"
@@ -121,8 +121,13 @@
          :field-definitions
          (fn [[name-field-def _ password-field-def]]
            [name-field-def
-            (tx/map->FieldDefinition {:field-name "last_login", :base-type :type/DateTimeWithTZ})
-            password-field-def]))))))
+            (tx/map->FieldDefinition {:field-name "last_login_with_tz", :base-type :type/DateTimeWithTZ})
+            (tx/map->FieldDefinition {:field-name "last_login_without_tz", :base-type :type/DateTime})
+            password-field-def])))
+      :rows
+      (fn [rows]
+        (for [[username last-login password-text] rows]
+          [username last-login last-login password-text])))))
 
 (defonce ^{:doc "The usual `test-data` dataset, but only the `users` table; adds a `created_by` column to the users
   table that is self referencing."}
