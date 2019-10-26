@@ -74,7 +74,8 @@ const MetabaseSettings = {
     if (anchor) {
       anchor = `#${anchor}`;
     }
-    return `https://metabase.com/docs/${tag}${page}${anchor}`;
+    // return `https://metabase.com/docs/${tag}${page}${anchor}`;
+    return `https://fudan-pgx.yuque.com/choppy-platform/metabase`
   },
 
   newVersionAvailable: function(settings) {

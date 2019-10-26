@@ -345,9 +345,11 @@ export default class DashboardHeader extends Component {
     }
 
     if (
+      // !isFullscreen &&
+      // ((isPublicLinksEnabled && (isAdmin || dashboard.public_uuid)) ||
+      //   (isEmbeddingEnabled && isAdmin))
       !isFullscreen &&
-      ((isPublicLinksEnabled && (isAdmin || dashboard.public_uuid)) ||
-        (isEmbeddingEnabled && isAdmin))
+      ((isPublicLinksEnabled && dashboard.public_uuid) || isEmbeddingEnabled)
     ) {
       buttons.push(
         <DashboardEmbedWidget key="dashboard-embed" dashboard={dashboard} />,
