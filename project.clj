@@ -134,6 +134,9 @@
    [weavejester/dependency "0.2.1"]                                   ; Dependency graphs and topological sorting
    ]
 
+  :repositories [["central" "https://maven.aliyun.com/nexus/content/groups/public"]
+                 ["clojars" "https://mirrors.tuna.tsinghua.edu.cn/clojars/"]]
+  
   :main ^:skip-aot metabase.core
 
   ;; TODO - WHAT DOES THIS DO?
@@ -149,7 +152,7 @@
   ["-XX:+IgnoreUnrecognizedVMOptions"                                 ; ignore things not recognized for our Java version instead of refusing to start
    "-Xverify:none"                                                    ; disable bytecode verification when running in dev so it starts slightly faster
    "-Djava.awt.headless=true"]                                        ; prevent Java icon from randomly popping up in dock when running `lein ring server`
-
+  
   :target-path "target/%s"
 
   :javac-options
@@ -170,7 +173,7 @@
 
     :plugins
     [[lein-environ "1.1.0"]] ; easy access to environment variables
-
+    
     :injections
     [(require 'pjstadig.humane-test-output)
      (pjstadig.humane-test-output/activate!)
@@ -248,7 +251,7 @@
    :repl
    [:include-all-drivers
     {:jvm-opts ["-Duser.timezone=UTC"]}] ; so running the tests doesn't give you different answers
-
+   
    :bikeshed
    [:include-all-drivers
     {:plugins
@@ -324,7 +327,7 @@
    :profile
    {:jvm-opts ["-XX:+CITime"                                          ; print time spent in JIT compiler
                "-XX:+PrintGC"]} ; print a message when garbage collection takes place
-
+   
    ;; get the H2 shell with 'lein h2'
    :h2-shell
    {:main org.h2.tools.Shell}

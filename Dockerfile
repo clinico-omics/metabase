@@ -19,7 +19,7 @@ ENV LC_CTYPE en_US.UTF-8
 RUN apk add --update bash yarn git wget make gettext
 
 # lein:    backend dependencies and building
-ADD https://raw.github.com/technomancy/leiningen/stable/bin/lein /usr/local/bin/lein
+ADD http://nordata-cdn.oss-cn-shanghai.aliyuncs.com/choppy/lein /usr/local/bin/lein
 RUN chmod 744 /usr/local/bin/lein
 RUN lein upgrade
 
@@ -43,7 +43,7 @@ RUN bin/build
 RUN apk add --update java-cacerts
 
 # import AWS RDS cert into /etc/ssl/certs/java/cacerts
-ADD https://s3.amazonaws.com/rds-downloads/rds-combined-ca-bundle.pem .
+ADD http://nordata-cdn.oss-cn-shanghai.aliyuncs.com/choppy/rds-combined-ca-bundle.pem .
 RUN keytool -noprompt -import -trustcacerts -alias aws-rds \
   -file rds-combined-ca-bundle.pem \
   -keystore /etc/ssl/certs/java/cacerts \
