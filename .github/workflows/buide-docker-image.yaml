@@ -14,12 +14,15 @@ jobs:
       id: config
       run: |
         SHA=$(echo ${GITHUB_SHA:0:8})
-        DEFAULT=$(echo $GITHUB_REF | sed -e "s/^refs\/tags//")
-        if [ ! -z $DEFAULT ]; then
-          VERSION=${DEFAULT}-tgmc-${SHA}
+        TAG=$(echo $GITHUB_REF | sed -e "s/^refs\/tags//")
+        INVALID_TAG=$(echo $TAG | grep "/" )
+        echo "TAG: ${TAG}, INVALID_TAG: ${INVALID_TAG}, SHA: ${SHA}"
+        if [ -z $INVALID_TAG ]; then
+          VERSION=${TAG}-tgmc-${SHA}
         else
           VERSION=tgmc-${SHA}
         fi
+        echo "VERSION: ${VERSION}"
         echo ::set-output name=version::$VERSION
 
     - name: Checkout
