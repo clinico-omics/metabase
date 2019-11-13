@@ -264,23 +264,24 @@
 (expect
   {:row_count 1
    :status    :completed
-   :data      {:rows        [["Toucan Sighting" 1000]]
-               :native_form expected-ga-query
-               :cols        [{:description     "This is ga:eventLabel"
-                              :special_type    nil
-                              :name            "ga:eventLabel"
-                              :settings        nil
-                              :source          :breakout
-                              :parent_id       nil
-                              :visibility_type :normal
-                              :display_name    "ga:eventLabel"
-                              :fingerprint     nil
-                              :base_type       :type/Text}
-                             {:name         "metric"
-                              :display_name "metric"
-                              :source       :aggregation
-                              :description  "This is metric"
-                              :base_type    :type/Text}]}}
+   :data      {:rows             [["Toucan Sighting" 1000]]
+               :native_form      expected-ga-query
+               :cols             [{:description     "This is ga:eventLabel"
+                                   :special_type    nil
+                                   :name            "ga:eventLabel"
+                                   :settings        nil
+                                   :source          :breakout
+                                   :parent_id       nil
+                                   :visibility_type :normal
+                                   :display_name    "ga:eventLabel"
+                                   :fingerprint     nil
+                                   :base_type       :type/Text}
+                                  {:name         "metric"
+                                   :display_name "metric"
+                                   :source       :aggregation
+                                   :description  "This is metric"
+                                   :base_type    :type/Text}]
+               :results_timezone "UTC"}}
   (with-redefs [ga/memoized-column-metadata (fn [_ column-name]
                                               {:display_name column-name
                                                :description  (str "This is " column-name)

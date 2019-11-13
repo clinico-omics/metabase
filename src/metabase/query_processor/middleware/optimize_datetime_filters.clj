@@ -2,7 +2,7 @@
   "Middlware that optimizes equality (`=` and `!=`) and comparison (`<`, `between`, etc.) filter clauses against
   bucketed datetime fields. See docstring for `optimize-datetime-filters` for more details."
   (:require [metabase.mbql.util :as mbql.u]
-            [metabase.util.date :as du]))
+            [metabase.util.date-2 :as u.date]))
 
 (def ^:private optimizable-units
   #{:second :minute :hour :day :week :month :quarter :year})
@@ -33,11 +33,11 @@
      [:absolute-datetime _ (unit-2 :guard optimizable-units)]]
     (= (datetime-field-unit field) unit-1 unit-2)))
 
-(defn- lower-bound [unit inst]
-  (du/date-trunc unit inst))
+(defn- lower-bound [unit t]
+  (:start (u.date/range t unit)))
 
-(defn- upper-bound [unit inst]
-  (du/relative-date unit 1 (lower-bound unit inst)))
+(defn- upper-bound [unit t]
+  (:end (u.date/range t unit)))
 
 (defn- change-datetime-field-unit-to-default [field]
   (mbql.u/replace field
@@ -45,7 +45,9 @@
     [:datetime-field wrapped :default]))
 
 (defmulti ^:private optimize-filter
-  mbql.u/dispatch-by-clause-name-or-class)
+  {:arglists '([clause])}
+  (fn [clause]
+    (mbql.u/dispatch-by-clause-name-or-class clause)))
 
 (defmethod optimize-filter :=
   [[_ field [_ inst unit]]]
@@ -62,19 +64,32 @@
 
 (defn- optimize-comparison-filter
   [trunc-fn [filter-type field [_ inst unit]]]
-  [filter-type (change-datetime-field-unit-to-default field) [:absolute-datetime (trunc-fn unit inst) :default]])
+  [filter-type
+   (change-datetime-field-unit-to-default field)
+   [:absolute-datetime (trunc-fn unit inst) :default]])
 
-(defmethod optimize-filter :<  [filter-clause] (optimize-comparison-filter lower-bound filter-clause))
-(defmethod optimize-filter :<= [filter-clause] (optimize-comparison-filter lower-bound filter-clause))
-(defmethod optimize-filter :>  [filter-clause] (optimize-comparison-filter upper-bound filter-clause))
-(defmethod optimize-filter :>= [filter-clause] (optimize-comparison-filter upper-bound filter-clause))
+(defmethod optimize-filter :<
+  [filter-clause]
+  (optimize-comparison-filter lower-bound filter-clause))
+
+(defmethod optimize-filter :<=
+  [filter-clause]
+  (optimize-comparison-filter lower-bound filter-clause))
+
+(defmethod optimize-filter :>
+  [filter-clause]
+  (optimize-comparison-filter upper-bound filter-clause))
+
+(defmethod optimize-filter :>=
+  [filter-clause]
+  (optimize-comparison-filter upper-bound filter-clause))
 
 (defmethod optimize-filter :between
   [[_ field [_ lower unit] [_ upper]]]
   (let [field' (change-datetime-field-unit-to-default field)]
     [:and
      [:>= field' [:absolute-datetime (lower-bound unit lower) :default]]
-     [:< field'  [:absolute-datetime (upper-bound unit upper) :default]]]))
+     [:<  field' [:absolute-datetime (upper-bound unit upper) :default]]]))
 
 (defn- optimize-datetime-filters* [{query-type :type, :as query}]
   (if (not= query-type :query)
