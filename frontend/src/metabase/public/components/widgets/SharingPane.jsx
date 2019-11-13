@@ -66,7 +66,7 @@ export default class SharingPane extends Component {
 
     return (
       <div className="pt2 ml-auto mr-auto" style={{ maxWidth: 600 }}>
-        {isAdmin && isPublicSharingEnabled && (
+        {isPublicSharingEnabled && (
           <div className="pb2 mb4 border-bottom flex align-center">
             <h4>{t`Enable sharing`}</h4>
             <div className="ml-auto">
