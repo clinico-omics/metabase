@@ -16,7 +16,8 @@ ENV LC_CTYPE en_US.UTF-8
 # make:    backend building
 # gettext: translations
 
-RUN apk add --update bash yarn git wget make gettext
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
+    apk add --update bash yarn git wget make gettext
 
 # lein:    backend dependencies and building
 ADD http://nordata-cdn.oss-cn-shanghai.aliyuncs.com/choppy/lein /usr/local/bin/lein
