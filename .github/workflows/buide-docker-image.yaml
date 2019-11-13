@@ -23,7 +23,7 @@ jobs:
         echo ::set-output name=version::$VERSION
 
     - name: Checkout
-      uses: actions/checkout@tgmc-master
+      uses: actions/checkout@master
 
     - name: Publish docker
       id: docker
