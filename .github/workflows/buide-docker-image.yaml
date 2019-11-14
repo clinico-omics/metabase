@@ -40,3 +40,14 @@ jobs:
 
     - name: Print the name of built image
       run: echo "${{steps.docker.outputs.image}}"
+
+    - name: Dingtalk Robot Message
+    uses: fifsky/dingtalk-action@master
+    with:
+      url: ${{ secrets.DINGTALK_WEBHOOK }}
+      type: markdown
+      content: |
+        # Metabase镜像自动构建通知
+        @Choppy Team 主人，我已将您刚更新在Github上的Metabase代码，构建成Docker镜像发布到阿里云镜像仓库了，请您随时取用
+        > Choppy Team：可登录 https://github.com/clinico-omics/metabase 查看详情
+      at: Choppy Team

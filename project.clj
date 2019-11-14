@@ -136,8 +136,9 @@
    [weavejester/dependency "0.2.1"]                                   ; Dependency graphs and topological sorting
    ]
 
-  :repositories [["central" "https://maven.aliyun.com/nexus/content/groups/public"]
-                 ["clojars" "https://mirrors.tuna.tsinghua.edu.cn/clojars/"]]
+  ; Uncomment the block when you are in china.
+  ; :repositories [["central" "https://maven.aliyun.com/nexus/content/groups/public"]
+  ;                ["clojars" "https://mirrors.tuna.tsinghua.edu.cn/clojars/"]]
   
   :main ^:skip-aot metabase.core
 
