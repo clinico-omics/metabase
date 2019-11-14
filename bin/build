@@ -65,6 +65,10 @@ all() {
     version && translations && frontend && sample-dataset && drivers && uberjar
 }
 
+no-drivers() {
+    version && translations && frontend && sample-dataset && uberjar
+}
+
 no-translations() {
     version && frontend && sample-dataset && drivers && uberjar
 }

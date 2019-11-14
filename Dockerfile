@@ -36,8 +36,8 @@ RUN yarn
 # add the rest of the source
 ADD . .
 
-# build the app
-RUN bin/build
+# build the app, but no drivers
+RUN bin/build no-drivers
 
 # install updated cacerts to /etc/ssl/certs/java/cacerts
 RUN apk add --update java-cacerts
@@ -65,6 +65,9 @@ RUN apk add --update bash ttf-dejavu fontconfig
 
 # add fixed cacerts
 COPY --from=builder /etc/ssl/certs/java/cacerts /opt/java/openjdk/lib/security/cacerts
+
+# Add drivers from website
+ADD ./modules/jar/plugins.tgz /app/
 
 # add Metabase script and uberjar
 RUN mkdir -p bin target/uberjar
