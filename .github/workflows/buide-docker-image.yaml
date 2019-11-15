@@ -34,7 +34,7 @@ jobs:
       with:
         username: ${{ secrets.ALIYUN_DOCKER_USERNAME }}
         password: ${{ secrets.ALIYUN_DOCKER_PASSWORD }}
-        repository: clinico-omics/metabase
+        repository: metabase
         registry: registry.cn-shanghai.aliyuncs.com/pgx-docker-registry
         tag: ${{ steps.config.outputs.version }}
 
