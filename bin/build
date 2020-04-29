@@ -57,7 +57,7 @@ all() {
 }
 
 no-drivers() {
-    version && translations && frontend && sample-dataset && uberjar
+    version && translations && frontend && uberjar
 }
 
 no-translations() {
