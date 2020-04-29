@@ -9,6 +9,7 @@
              [driver :as driver]
              [util :as u]]
             [metabase.driver.util :as driver.u]
+            [metabase.query-processor.context.default :as context.default]
             [metabase.query-processor.store :as qp.store]
             [metabase.util.i18n :refer [deferred-tru trs tru]])
   (:import java.text.SimpleDateFormat
@@ -191,7 +192,7 @@
 
   DEPRECATED — `metabase.driver/current-db-time`, the method this function provides an implementation for, is itself
   deprecated. Implement `metabase.driver/db-default-timezone` instead directly."
-  ^DateTime [driver database]
+  ^org.joda.time.DateTime [driver database]
   {:pre [(map? database)]}
   (driver/with-driver driver
     (let [native-query    (current-db-time-native-query driver)
@@ -199,15 +200,20 @@
           settings        (when-let [report-tz (driver.u/report-timezone-if-supported driver)]
                             {:settings {:report-timezone report-tz}})
           time-str        (try
-                            ;; need to initialize the store sicne we're calling `execute-query` directly instead of
-                            ;; going thru normal QP pipeline
+                            ;; need to initialize the store since we're calling `execute-reducible-query` directly
+                            ;; instead of going thru normal QP pipeline
                             (qp.store/with-store
                               (qp.store/fetch-and-store-database! (u/get-id database))
-                              (->
-                               (driver/execute-query driver
-                                 (merge settings {:database (u/get-id database), :native {:query native-query}}))
-                               :rows
-                               ffirst))
+                              (let [query {:database (u/get-id database), :native {:query native-query}}
+                                    reduce (fn [metadata reducible-rows]
+                                             (transduce
+                                              identity
+                                              (fn
+                                                ([] nil)
+                                                ([row] (first row))
+                                                ([_ row] (reduced row)))
+                                              reducible-rows))]
+                                (driver/execute-reducible-query driver query (context.default/default-context) reduce)))
                             (catch Exception e
                               (throw
                                (Exception.
@@ -244,7 +250,7 @@
     ;; java.sql types and Joda-Time types should be considered DEPRECATED
     java.sql.Date                  :type/Date
     java.sql.Timestamp             :type/DateTime
-    java.util.Date                 :type/DateTime
+    java.util.Date                 :type/Date
     DateTime                       :type/DateTime
     ;; shouldn't this be :type/UUID ?
     java.util.UUID                 :type/Text
@@ -253,10 +259,14 @@
     java.time.LocalDate            :type/Date
     java.time.LocalTime            :type/Time
     java.time.LocalDateTime        :type/DateTime
-    java.time.OffsetTime           :type/Time
+    ;; `OffsetTime` and `OffsetDateTime` should be mapped to one of `type/TimeWithLocalTZ`/`type/TimeWithZoneOffset`
+    ;; and `type/DateTimeWithLocalTZ`/`type/DateTimeWithZoneOffset` respectively. We can't really tell how they're
+    ;; stored in the DB based on class alone, so drivers should return more specific types where possible. See
+    ;; discussion in the `metabase.types` namespace.
+    java.time.OffsetTime           :type/TimeWithTZ
     java.time.OffsetDateTime       :type/DateTimeWithTZ
-    java.time.ZonedDateTime        :type/DateTimeWithTZ
-    java.time.Instant              :type/DateTime
+    java.time.ZonedDateTime        :type/DateTimeWithZoneID
+    java.time.Instant              :type/Instant
     ;; TODO - this should go in the Postgres driver implementation of this method rather than here
     org.postgresql.util.PGobject   :type/*
     ;; all-NULL columns in DBs like Mongo w/o explicit types

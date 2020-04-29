@@ -6,15 +6,19 @@
             [clojure.tools.logging :as log]
             [java-time :as t]
             [java-time.core :as t.core]
+            [metabase.config :as config]
             [metabase.util.date-2
              [common :as common]
              [parse :as parse]]
             [metabase.util.i18n :refer [tru]]
             [schema.core :as s])
-  (:import [java.time Instant LocalDate LocalDateTime LocalTime OffsetDateTime OffsetTime ZonedDateTime]
-           [java.time.temporal Temporal TemporalAdjuster WeekFields]))
+  (:import [java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime OffsetTime Period ZonedDateTime]
+           [java.time.temporal Temporal TemporalAdjuster WeekFields]
+           org.threeten.extra.PeriodDuration))
 
-(defn- add-zone-to-local [t timezone-id]
+(defn- add-zone-to-local
+  "Converts a temporal type without timezone info to one with zone info (i.e., a `ZonedDateTime`)."
+  [t timezone-id]
   (condp instance? t
     LocalDateTime (t/zoned-date-time t (t/zone-id timezone-id))
     LocalDate     (t/zoned-date-time t (t/local-time 0) (t/zone-id timezone-id))
@@ -45,6 +49,7 @@
 
 (defn- temporal->iso-8601-formatter [t]
   (condp instance? t
+    Instant        :iso-offset-date-time
     LocalDate      :iso-local-date
     LocalTime      :iso-local-time
     LocalDateTime  :iso-local-date-time
@@ -61,7 +66,8 @@
 (defn format
   "Format temporal value `t` as a ISO-8601 date/time/datetime string."
   ^String [t]
-  (format* (temporal->iso-8601-formatter t) t))
+  (when t
+    (format* (temporal->iso-8601-formatter t) t)))
 
 (defn format-sql
   "Format a temporal value `t` as a SQL-style literal string (for most SQL databases). This is the same as ISO-8601 but
@@ -111,6 +117,8 @@
     :iso-week-of-year
     :month-of-year
     :quarter-of-year
+    ;; TODO - in this namespace `:year` is something you can both extract and truncate to. In MBQL `:year` is a truncation
+    ;; operation. Maybe we should rename this unit to clear up the potential confusion (?)
     :year})
 
 (def ^:private week-fields*
@@ -130,7 +138,7 @@
   Values are returned as numbers (currently, always and integers, but this may change if we add support for
   `:fraction-of-second` in the future.)"
   ([unit]
-   (extract unit (t/zoned-date-time)))
+   (extract (t/zoned-date-time) unit))
 
   ([t :- Temporal, unit :- (apply s/enum extract-units)]
    (t/as t (case unit
@@ -146,24 +154,51 @@
              :quarter-of-year  :quarter-of-year
              :year             :year))))
 
-(def ^:private adjusters*
-  {:first-day-of-week
-   (reify TemporalAdjuster
-     (adjustInto [_ t]
-       (t/adjust t :previous-or-same-day-of-week :sunday)))
+(defmulti ^TemporalAdjuster adjuster
+  "Get the custom `TemporalAdjuster` named by `k`.
 
-   :first-day-of-iso-week
-   (reify TemporalAdjuster
-     (adjustInto [_ t]
-       (t/adjust t :previous-or-same-day-of-week :monday)))
+    ;; adjust 2019-12-10T17:26 to the second week of the year
+    (t/adjust #t \"2019-12-10T17:26\" (u.date/adjuster :week-of-year 2)) ;; -> #t \"2019-01-06T17:26\""
+  {:arglists '([k & args])}
+  (fn [k & _] (keyword k)))
 
-   :first-day-of-quarter
-   (reify TemporalAdjuster
-     (adjustInto [_ t]
-       (.with t (.atDay (t/year-quarter t) 1))))})
+(defmethod adjuster :default
+  [k]
+  (throw (Exception. (tru "No temporal adjuster named {0}" k))))
 
-(defn- adjusters ^TemporalAdjuster [k]
-  (get adjusters* k))
+(defmethod adjuster :first-day-of-week
+  [_]
+  (reify TemporalAdjuster
+    (adjustInto [_ t]
+      (t/adjust t :previous-or-same-day-of-week :sunday))))
+
+(defmethod adjuster :first-day-of-iso-week
+  [_]
+  (reify TemporalAdjuster
+    (adjustInto [_ t]
+      (t/adjust t :previous-or-same-day-of-week :monday))))
+
+(defmethod adjuster :first-day-of-quarter
+  [_]
+  (reify TemporalAdjuster
+    (adjustInto [_ t]
+      (.with t (.atDay (t/year-quarter t) 1)))))
+
+(defmethod adjuster :first-week-of-year
+  [_]
+  (reify TemporalAdjuster
+    (adjustInto [_ t]
+      (-> t
+          (t/adjust :first-day-of-year)
+          (t/adjust (adjuster :first-day-of-week))))))
+
+(defmethod adjuster :week-of-year
+  [_ week-of-year]
+  (reify TemporalAdjuster
+    (adjustInto [_ t]
+      (-> t
+          (t/adjust (adjuster :first-week-of-year))
+          (t/plus (t/weeks (dec week-of-year)))))))
 
 ;; if you attempt to truncate a `LocalDate` to `:day` or anything smaller we can go ahead and return it as is
 (extend-protocol t.core/Truncatable
@@ -194,10 +229,10 @@
      :minute      (t/truncate-to t :minutes)
      :hour        (t/truncate-to t :hours)
      :day         (t/truncate-to t :days)
-     :week        (-> (.with t (adjusters :first-day-of-week))     (t/truncate-to :days))
-     :iso-week    (-> (.with t (adjusters :first-day-of-iso-week)) (t/truncate-to :days))
+     :week        (-> (.with t (adjuster :first-day-of-week))     (t/truncate-to :days))
+     :iso-week    (-> (.with t (adjuster :first-day-of-iso-week)) (t/truncate-to :days))
      :month       (-> (t/adjust t :first-day-of-month)             (t/truncate-to :days))
-     :quarter     (-> (.with t (adjusters :first-day-of-quarter))  (t/truncate-to :days))
+     :quarter     (-> (.with t (adjuster :first-day-of-quarter))  (t/truncate-to :days))
      :year        (-> (t/adjust t :first-day-of-year)              (t/truncate-to :days)))))
 
 (s/defn bucket :- (s/cond-pre Number Temporal)
@@ -218,83 +253,151 @@
      (truncate-units unit) (truncate t unit)
      :else                 (throw (Exception. (tru "Invalid unit: {0}" unit))))))
 
-(defn range
-  "Get a start (inclusive) and end (exclusive) pair of instants for a `unit` span of time containing `t`. e.g.
+(s/defn range :- {:start Temporal, :end Temporal}
+  "Get a start (by default, inclusive) and end (by default, exclusive) pair of instants for a `unit` span of time
+  containing `t`. e.g.
 
     (range (t/zoned-date-time \"2019-11-01T15:29:00Z[UTC]\") :week)
     ->
     {:start (t/zoned-date-time \"2019-10-27T00:00Z[UTC]\")
      :end   (t/zoned-date-time \"2019-11-03T00:00Z[UTC]\")}"
-  [t unit]
-  (let [t (truncate t unit)]
-    {:start t, :end (add t unit 1)}))
+  ([unit]
+   (range (t/zoned-date-time) unit))
 
-(defn date-range
-  "Return a date range with `:start` (inclusive) and `:end` (exclusive) points, either of which may be relative to the
-  other if passed as a pair of `[n unit]`. With three args, both `start` and `end` can be relative to some instant
-  `t`.
+  ([t unit]
+   (range t unit nil))
 
-    (date-range (t/local-date \"2019-03-25\") (t/local-date \"2019-03-31\"))
-    ->
-    {:start (t/local-date \"2019-03-25\"), :end (t/local-date \"2019-03-31\")}
+  ([t :- Temporal, unit :- (apply s/enum add-units), {:keys [start end resolution]
+                                                      :or   {start      :inclusive
+                                                             end        :exclusive
+                                                             resolution :millisecond}}]
+   (let [t (truncate t unit)]
+     {:start (case start
+               :inclusive t
+               :exclusive (add t resolution -1))
+      :end   (case end
+               :inclusive (add (add t unit 1) resolution -1)
+               :exclusive (add t unit 1))})))
 
-    ;; get the month starting with `2019-11-01`, i.e. the entire month of November 2019
-    (date-range (t/local-date \"2019-11-01\") [1 :month])
-    ->
-    {:start (t/local-date \"2019-11-01\"), :end (t/local-date \"2019-12-01\")}
+(defn comparison-range
+  "Generate an range that of instants that when bucketed by `unit` would be `=`, `<`, `<=`, `>`, or `>=` to the value of
+  an instant `t` bucketed by `unit`. (`comparison-type` is one of `:=`, `:<`, `:<=`, `:>`, or `:>=`.) By default, the
+  start of the resulting range is inclusive, and the end exclusive; this can be tweaked by passing `options`.
 
-    ;; get the month prior to `2019-11-01`
-    (date-range [-1 :month] (t/local-date \"2019-11-01\"))
-    ->
-    {:start (t/local-date \"2019-10-01\"), :end (t/local-date \"2019-11-01\")}
+    ;; Generate range off instants that have the same MONTH as Nov 18th
+    (comparison-range (t/local-date \"2019-11-18\") :month := {:resolution :day})
+    ;; -> {:start (t/local-date \"2019-11-01\"), :end (t/local-date \"2019-12-01\")}"
+  ([unit comparison-type]
+   (comparison-range (t/zoned-date-time) unit comparison-type))
 
-    ;; get a span from two months before `2019-11-05` to the next two months after
-    (date-range [-2 :month] (t/local-date \"2019-11-05\") [2 :month])
-    ->
-    {:start (t/local-date \"2019-09-05\"), :end (t/local-date \"2020-01-05\")}"
-  {:arglists '([start end] [start [n unit]] [[n unit] end] [[n unit] t [n unit]])}
-  ([start end]
+  ([t unit comparison-type]
+   (comparison-range t unit comparison-type nil))
+
+  ([t unit comparison-type {:keys [start end resolution]
+                            :or   {start      :inclusive
+                                   end        :exclusive
+                                   resolution :millisecond}
+                            :as   options}]
+   (case comparison-type
+     :<  {:end (case end
+                 :inclusive (add (truncate t unit) resolution -1)
+                 :exclusive (truncate t unit))}
+     :<= {:end (let [t (add (truncate t unit) unit 1)]
+                 (case end
+                   :inclusive (add t resolution -1)
+                   :exclusive t))}
+     :>  {:start (let [t (add (truncate t unit) unit 1)]
+                   (case start
+                     :inclusive t
+                     :exclusive (add t resolution -1)))}
+     :>= {:start (let [t (truncate t unit)]
+                   (case start
+                     :inclusive t
+                     :exclusive (add t resolution -1)))}
+     :=  (range t unit options))))
+
+(defn ^PeriodDuration period-duration
+  "Return the Duration between two temporal values `x` and `y`."
+  {:arglists '([s] [period] [duration] [period duration] [start end])}
+  ([x]
+   (when x
+     (condp instance? x
+       PeriodDuration x
+       CharSequence   (PeriodDuration/parse x)
+       Period         (PeriodDuration/of ^Period x)
+       Duration       (PeriodDuration/of ^Duration x))))
+
+  ([x y]
    (cond
-     (and (instance? Temporal start) (instance? Temporal end))
-     {:start (truncate start :day), :end (truncate end :day)}
+     (and (instance? Period x) (instance? Duration y))
+     (PeriodDuration/of x y)
 
-     (instance? Temporal start)
-     (date-range nil start end)
+     (instance? Instant x)
+     (period-duration (t/offset-date-time x (t/zone-offset 0)) y)
 
-     (instance? Temporal end)
-     (date-range start end nil)))
+     (instance? Instant y)
+     (period-duration x (t/offset-date-time y (t/zone-offset 0)))
 
-  ([[start-n start-unit :as start] t [end-n end-unit :as end]]
-   {:pre [(instance? Temporal t)]}
-   (date-range
-    (if start
-      (add t start-unit start-n)
-      t)
-    (if end
-      (add t end-unit end-n)
-      t))))
+     :else
+     (PeriodDuration/between x y))))
+
+(defn compare-period-durations
+  "With two args: Compare two periods/durations. Returns a negative value if `d1` is shorter than `d2`, zero if they are
+  equal, or positive if `d1` is longer than `d2`.
+
+    (u.date/compare-period-durations \"P1Y\" \"P11M\") ; -> 1 (i.e., 1 year is longer than 11 months)
+
+  You can combine this with `period-duration` to compare the duration between two temporal values against another
+  duration:
+
+    (u.date/compare-period-durations (u.date/period-duration #t \"2019-01-01\" #t \"2019-07-01\") \"P11M\") ; -> -1
+
+  Note that this calculation is inexact, since it calclates relative to a fixed point in time, but should be
+  sufficient for most if not all use cases."
+  [d1 d2]
+  (when (and d1 d2)
+    (let [t (t/offset-date-time "1970-01-01T00:00Z")]
+      (compare (.addTo (period-duration d1) t)
+               (.addTo (period-duration d2) t)))))
+
+(defn less-than-period-duration?
+  "True if period/duration `d1` is shorter than period/duration `d2`."
+  [d1 d2]
+  (neg? (compare-period-durations d1 d2)))
+
+(defn greater-than-period-duration?
+  "True if period/duration `d1` is longer than period/duration `d2`."
+  [d1 d2]
+  (pos? (compare-period-durations d1 d2)))
+
+(defn- now-of-same-class
+  "Return a temporal value representing *now* of the same class as `t`, e.g. for comparison purposes."
+  ^Temporal [t]
+  (when t
+    (condp instance? t
+      Instant        (t/instant)
+      LocalDate      (t/local-date)
+      LocalTime      (t/local-time)
+      LocalDateTime  (t/local-date-time)
+      OffsetTime     (t/offset-time)
+      OffsetDateTime (t/offset-date-time)
+      ZonedDateTime  (t/zoned-date-time))))
+
+(defn older-than?
+  "True if temporal value `t` happened before some period/duration ago, compared to now. Prefer this over using
+  `t/before?` to compare times to now because it is incredibly fussy about the classes of arguments it is passed.
+
+    ;; did `t` happen more than 2 months ago?
+    (older-than? t (t/months 2))"
+  [t duration]
+  (greater-than-period-duration?
+   (period-duration t (now-of-same-class t))
+   duration))
 
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                                      Etc                                                       |
 ;;; +----------------------------------------------------------------------------------------------------------------+
-
-;; TIMEZONE FIXME - I think these actually belong in `metabase.util`
-
-(defn seconds->ms
-  "Convert `seconds` to milliseconds. More readable than doing this math inline."
-  [seconds]
-  (* seconds 1000))
-
-(defn minutes->seconds
-  "Convert `minutes` to seconds. More readable than doing this math inline."
-  [minutes]
-  (* 60 minutes))
-
-(defn minutes->ms
-  "Convert `minutes` to milliseconds. More readable than doing this math inline."
-  [minutes]
-  (-> minutes minutes->seconds seconds->ms))
 
 ;; Mainly for REPL usage. Have various temporal types print as a `java-time` function call you can use
 (doseq [[klass f-symb] {Instant        't/instant
@@ -306,4 +409,34 @@
                         ZonedDateTime  't/zoned-date-time}]
   (defmethod print-method klass
     [t writer]
-    (print-method (list f-symb (str t)) writer)))
+    (print-method (list f-symb (str t)) writer))
+
+  (defmethod print-dup klass
+    [t ^java.io.Writer writer]
+    (.write writer (clojure.core/format "#t \"%s\"" (str t)))))
+
+(defmethod print-method PeriodDuration
+  [d writer]
+  (print-method (list 'u.date/period-duration (str d)) writer))
+
+(defmethod print-dup PeriodDuration
+  [d ^java.io.Writer writer]
+  (.write writer (clojure.core/format "(metabase.util.date-2/period-duration \"%s\")" (str d))))
+
+(defmethod print-method Period
+  [d writer]
+  (print-method (list 't/period (str d)) writer))
+
+(defmethod print-method Duration
+  [d writer]
+  (print-method (list 't/duration (str d)) writer))
+
+;; mark everything in the `clj-time` namespaces as `:deprecated`, if they're loaded. If not, we don't care
+(when config/is-dev?
+  (doseq [a-namespace '[clj-time.core clj-time.coerce clj-time.format]]
+    (try
+      (let [a-namespace (the-ns a-namespace)]
+        (alter-meta! a-namespace assoc :deprecated true)
+        (doseq [[_ varr] (ns-publics a-namespace)]
+          (alter-meta! varr assoc :deprecated true)))
+      (catch Throwable _))))
